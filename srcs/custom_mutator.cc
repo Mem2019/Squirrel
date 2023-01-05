@@ -12,10 +12,11 @@
 #include "yaml-cpp/yaml.h"
 
 struct SquirrelMutator {
-  SquirrelMutator(DataBase *db) : database(db) {}
+  SquirrelMutator(DataBase *db) : database(db), count(0) {}
   ~SquirrelMutator() { delete database; }
   DataBase *database;
   std::string current_input;
+  size_t count;
 };
 
 extern "C" {
@@ -52,8 +53,12 @@ u8 afl_custom_queue_new_entry(SquirrelMutator *mutator,
 
 unsigned int afl_custom_fuzz_count(SquirrelMutator *mutator,
                                    const unsigned char *buf, size_t buf_size) {
+  // Consume all mutated seeds in last seed
+  DataBase *db = mutator->database;
+  while (db->has_mutated_test_cases())
+    db->get_next_mutated_query();
   std::string sql((const char *)buf, buf_size);
-  return mutator->database->mutate(sql);
+  return db->mutate(sql);
 }
 
 size_t afl_custom_fuzz(SquirrelMutator *mutator, uint8_t *buf, size_t buf_size,
@@ -61,7 +66,15 @@ size_t afl_custom_fuzz(SquirrelMutator *mutator, uint8_t *buf, size_t buf_size,
                        size_t add_buf_size,  // add_buf can be NULL
                        size_t max_size) {
   DataBase *db = mutator->database;
-  assert(db->has_mutated_test_cases());
+  if (!db->has_mutated_test_cases()) {
+    std::string sql((const char *)buf, buf_size);
+    db->mutate(sql);
+    if (!db->has_mutated_test_cases()) {
+      std::cerr << "Not mutated " << ++mutator->count << std::endl;
+      *out_buf = buf;
+      return buf_size;
+    }
+  }
   mutator->current_input = db->get_next_mutated_query();
   *out_buf = (u8 *)mutator->current_input.c_str();
   return mutator->current_input.size();
