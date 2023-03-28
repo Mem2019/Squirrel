@@ -68,15 +68,10 @@ size_t afl_custom_fuzz(SquirrelMutator *mutator, uint8_t *buf, size_t buf_size,
                        size_t max_size) {
   DataBase *db = mutator->database;
 
-  if (!db->has_mutated_test_cases()) {
+  while (!db->has_mutated_test_cases()) {
     // If there is no mutated test case, we mutate to generate some again.
     std::string sql((const char *)buf, buf_size);
     db->mutate(sql);
-    if (!db->has_mutated_test_cases()) {
-      std::cerr << "Failed to mutate: " << sql << std::endl;
-      *out_buf = empty;
-      return 1;
-    }
   }
 
   mutator->current_input = db->get_next_mutated_query();
