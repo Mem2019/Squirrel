@@ -268,7 +268,11 @@ string Mutator::validate(IR *root) {
     auto graph =
         build_dependency_graph(root, relationmap, cross_map, ordered_ir);
     fix_graph(graph, root, ordered_ir);
-    return fix(root);
+    string ret = fix(root);
+    parsed_ir = parser(ret);
+    if (parsed_ir == NULL) return "";
+    parsed_ir->deep_delete();
+    return ret;
   } catch (...) {
     // invalid sql , skip
   }
