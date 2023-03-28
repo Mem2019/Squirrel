@@ -12,10 +12,9 @@
 #include "yaml-cpp/yaml.h"
 
 struct SquirrelMutator {
-  SquirrelMutator(DataBase *db, DataBase *v) : database(db), verifier(v), count(0) {}
-  ~SquirrelMutator() { delete database; delete verifier;}
+  SquirrelMutator(DataBase *db) : database(db), count(0) {}
+  ~SquirrelMutator() { delete database; }
   DataBase *database;
-  DataBase *verifier;
   std::string current_input;
   size_t count;
 };
@@ -35,7 +34,7 @@ void *afl_custom_init(afl_state_t *afl, unsigned int seed) {
   if (!utils::validate_db_config(config)) {
     std::cerr << "Invalid config!" << std::endl;
   }
-  return new SquirrelMutator(create_database(config), create_database(config));
+  return new SquirrelMutator(create_database(config));
 }
 
 void afl_custom_deinit(SquirrelMutator *data) { delete data; }
@@ -68,7 +67,6 @@ size_t afl_custom_fuzz(SquirrelMutator *mutator, uint8_t *buf, size_t buf_size,
                        size_t add_buf_size,  // add_buf can be NULL
                        size_t max_size) {
   DataBase *db = mutator->database;
-  DataBase *v = mutator->verifier;
 
   if (!db->has_mutated_test_cases()) {
     // If there is no mutated test case, we mutate to generate some again.
