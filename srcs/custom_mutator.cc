@@ -61,6 +61,8 @@ unsigned int afl_custom_fuzz_count(SquirrelMutator *mutator,
   return db->mutate(sql);
 }
 
+static u8 empty[] = ";";
+
 size_t afl_custom_fuzz(SquirrelMutator *mutator, uint8_t *buf, size_t buf_size,
                        u8 **out_buf, uint8_t *add_buf,
                        size_t add_buf_size,  // add_buf can be NULL
@@ -68,26 +70,19 @@ size_t afl_custom_fuzz(SquirrelMutator *mutator, uint8_t *buf, size_t buf_size,
   DataBase *db = mutator->database;
   DataBase *v = mutator->verifier;
 
-  while (true) {
-
+  if (!db->has_mutated_test_cases()) {
+    // If there is no mutated test case, we mutate to generate some again.
+    std::string sql((const char *)buf, buf_size);
+    db->mutate(sql);
     if (!db->has_mutated_test_cases()) {
-      // If there is no mutated test case, we mutate to generate some again.
-      std::string sql((const char *)buf, buf_size);
-      db->mutate(sql);
+      std::cerr << "Failed to mutate: " << sql << std::endl;
+      *out_buf = empty;
+      return 1;
     }
-
-    mutator->current_input = db->get_next_mutated_query();
-
-    // For all mutated test case, we ensure it can be further mutated.
-    v->mutate(mutator->current_input);
-    bool can_be_mutated = false;
-    while (v->has_mutated_test_cases()) {
-      can_be_mutated = true;
-      v->get_next_mutated_query();
-    }
-    if (can_be_mutated) break;
-
   }
+
+  mutator->current_input = db->get_next_mutated_query();
+
   *out_buf = (u8 *)mutator->current_input.c_str();
   return mutator->current_input.size();
 }
