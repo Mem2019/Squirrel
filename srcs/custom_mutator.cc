@@ -12,9 +12,10 @@
 #include "yaml-cpp/yaml.h"
 
 struct SquirrelMutator {
-  SquirrelMutator(DataBase *db) : database(db), count(0) {}
-  ~SquirrelMutator() { delete database; }
+  SquirrelMutator(DataBase *db, DataBase *v) : database(db), verifier(v), count(0) {}
+  ~SquirrelMutator() { delete database; delete verifier;}
   DataBase *database;
+  DataBase *verifier;
   std::string current_input;
   size_t count;
 };
@@ -34,8 +35,7 @@ void *afl_custom_init(afl_state_t *afl, unsigned int seed) {
   if (!utils::validate_db_config(config)) {
     std::cerr << "Invalid config!" << std::endl;
   }
-  auto *mutator = create_database(config);
-  return new SquirrelMutator(mutator);
+  return new SquirrelMutator(create_database(config), create_database(config));
 }
 
 void afl_custom_deinit(SquirrelMutator *data) { delete data; }
@@ -66,16 +66,28 @@ size_t afl_custom_fuzz(SquirrelMutator *mutator, uint8_t *buf, size_t buf_size,
                        size_t add_buf_size,  // add_buf can be NULL
                        size_t max_size) {
   DataBase *db = mutator->database;
-  if (!db->has_mutated_test_cases()) {
-    std::string sql((const char *)buf, buf_size);
-    db->mutate(sql);
+  DataBase *v = mutator->verifier;
+
+  while (true) {
+
     if (!db->has_mutated_test_cases()) {
-      std::cerr << "Not mutated " << ++mutator->count << std::endl;
-      *out_buf = buf;
-      return buf_size;
+      // If there is no mutated test case, we mutate to generate some again.
+      std::string sql((const char *)buf, buf_size);
+      db->mutate(sql);
     }
+
+    mutator->current_input = db->get_next_mutated_query();
+
+    // For all mutated test case, we ensure it can be further mutated.
+    v->mutate(mutator->current_input);
+    bool can_be_mutated = false;
+    while (v->has_mutated_test_cases()) {
+      can_be_mutated = true;
+      v->get_next_mutated_query();
+    }
+    if (can_be_mutated) break;
+
   }
-  mutator->current_input = db->get_next_mutated_query();
   *out_buf = (u8 *)mutator->current_input.c_str();
   return mutator->current_input.size();
 }
