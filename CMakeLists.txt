@@ -95,6 +95,8 @@ foreach(dbms IN LISTS DBMS)
 
   string(TOUPPER ${dbms} UPPER_CASE_DBMS)
   add_library(${dbms}_mutator SHARED srcs/custom_mutator.cc srcs/db_factory.cc)
+  add_executable(${dbms}_filter srcs/input_filter.c)
+  target_link_libraries(${dbms}_filter PRIVATE ${dbms}_mutator)
   target_link_libraries(${dbms}_mutator ${dbms}_impl config_validator)
   target_include_directories(${dbms}_mutator PRIVATE srcs/internal/${dbms} srcs)
   # target_compile_options(${dbms}_mutator PRIVATE -fPIC)
